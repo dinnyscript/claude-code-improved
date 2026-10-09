@@ -11,6 +11,7 @@
   const SCHEMA = {
     colorsEnabled: { type: 'boolean', default: true },
     colorIntensity: { type: 'number', default: 0.6, min: 0, max: 1 },
+    colorFavicon: { type: 'boolean', default: true },
     widgetEnabled: { type: 'boolean', default: true },
     idleAfterSec: { type: 'number', default: 30, min: 5, max: 600 },
     nudgeEnabled: { type: 'boolean', default: true },
@@ -18,6 +19,7 @@
     notifyOnComplete: { type: 'boolean', default: true },
     titleStatus: { type: 'boolean', default: true },
     dailyStaringBudgetMin: { type: 'number', default: 30, min: 0, max: 24 * 60 },
+    budgetAlert: { type: 'boolean', default: true },
   };
 
   const DEFAULT_SETTINGS = Object.freeze(

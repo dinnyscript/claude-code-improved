@@ -1,11 +1,11 @@
 /*
  * Service-worker logic: the single writer for stats (so tabs never race),
- * the toolbar badge, and "Claude finished" notifications.
+ * the toolbar badge, "Claude finished" and over-budget notifications.
  */
 (function (root, factory) {
   const deps =
     typeof require === 'function'
-      ? Object.assign({}, require('./format.js'), require('./settings.js'), require('./stats.js'))
+      ? Object.assign({}, require('./format.js'), require('./chat-id.js'), require('./settings.js'), require('./stats.js'))
       : root.CCF;
   const api = factory(deps);
   if (typeof module === 'object' && module.exports) module.exports = api;
@@ -14,6 +14,8 @@
   'use strict';
 
   const NOTIFICATION_PREFIX = 'ccf-done:';
+  const BUDGET_NOTIFICATION_PREFIX = 'ccf-budget:';
+  const BUDGET_ALERTED_KEY = 'budgetAlertedDay';
   const MAINTENANCE_ALARM = 'ccf-maintenance';
   const KEEP_DAYS = 90;
   const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -27,8 +29,9 @@
     return `${Math.floor(minutes / 60)}h`;
   }
 
-  function createBackground({ chrome, now = Date.now }) {
+  function createBackground({ chrome, now = Date.now, contentScripts }) {
     const local = chrome.storage.local;
+    let budgetCheck = Promise.resolve();
 
     async function updateBadge() {
       try {
@@ -45,13 +48,35 @@
       }
     }
 
+    // One notification per day, the first time staring goes over the budget.
+    function checkBudget(day, dayStats) {
+      budgetCheck = budgetCheck.then(async () => {
+        const settings = await L.readSettings(chrome.storage.sync);
+        const budgetMs = settings.dailyStaringBudgetMin * 60000;
+        const { staringMs } = L.summarizeDay(dayStats).totals;
+        if (!settings.budgetAlert || budgetMs <= 0 || staringMs <= budgetMs || day !== L.dayKey(now())) return;
+        if ((await local.get(BUDGET_ALERTED_KEY))[BUDGET_ALERTED_KEY] === day) return;
+        await local.set({ [BUDGET_ALERTED_KEY]: day });
+        await chrome.notifications.create(`${BUDGET_NOTIFICATION_PREFIX}${day}`, {
+          type: 'basic',
+          iconUrl: chrome.runtime.getURL('icons/icon128.png'),
+          title: 'Daily staring budget used up',
+          message: `You've spent ${L.formatDuration(staringMs)} staring at Claude chats today, over your ${L.formatDuration(
+            budgetMs
+          )} budget. Start a focused task, or step away for a bit.`,
+          priority: 1,
+        });
+      });
+      return budgetCheck.catch(() => {});
+    }
+
     async function handleStatsDelta(msg) {
-      if (!DAY_RE.test(String(msg.day)) || typeof msg.chatId !== 'string' || !msg.chatId || !msg.delta) {
+      if (!DAY_RE.test(String(msg.day)) || !L.isTrackableChatKey(msg.chatId) || !msg.delta || typeof msg.delta !== 'object') {
         return { ok: false, error: 'invalid stats-delta' };
       }
       const title = typeof msg.title === 'string' ? msg.title.slice(0, 200) : undefined;
-      await L.addDelta(local, msg.day, msg.chatId.slice(0, 200), msg.delta, { title, now: now() });
-      await updateBadge();
+      const dayStats = await L.addDelta(local, msg.day, msg.chatId, msg.delta, { title, now: now() });
+      await checkBudget(msg.day, dayStats);
       return { ok: true };
     }
 
@@ -82,6 +107,7 @@
     }
 
     async function onNotificationClicked(id) {
+      if (id.startsWith(BUDGET_NOTIFICATION_PREFIX)) await chrome.notifications.clear(id);
       if (!id.startsWith(NOTIFICATION_PREFIX)) return;
       const [tabId, windowId] = id.slice(NOTIFICATION_PREFIX.length).split(':').map(Number);
       try {
@@ -98,21 +124,43 @@
       await updateBadge();
     }
 
+    // Tabs that were already open when the extension was installed or updated
+    // have no (working) content script until they reload; give them one now.
+    async function injectIntoOpenTabs() {
+      const files = contentScripts || chrome.runtime.getManifest().content_scripts[0].js;
+      const tabs = await chrome.tabs.query({ url: 'https://claude.ai/*' });
+      for (const tab of tabs) {
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files }).catch(() => {});
+      }
+    }
+
+    async function ensureAlarm() {
+      if (!(await chrome.alarms.get(MAINTENANCE_ALARM))) {
+        await chrome.alarms.create(MAINTENANCE_ALARM, { periodInMinutes: 30, delayInMinutes: 1 });
+      }
+    }
+
     function init() {
       chrome.runtime.onMessage.addListener(onMessage);
       chrome.notifications.onClicked.addListener(onNotificationClicked);
       chrome.alarms.onAlarm.addListener((alarm) => {
         if (alarm.name === MAINTENANCE_ALARM) maintenance().catch(() => {});
       });
-      chrome.alarms.create(MAINTENANCE_ALARM, { periodInMinutes: 30, delayInMinutes: 1 });
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'sync' && changes[L.SETTINGS_KEY]) updateBadge();
+      chrome.runtime.onInstalled.addListener(({ reason }) => {
+        if (reason === 'install' || reason === 'update') injectIntoOpenTabs().catch(() => {});
       });
+      // Any change to settings or today's stats (new time, "Delete all stats") refreshes the badge.
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if ((area === 'sync' && changes[L.SETTINGS_KEY]) || (area === 'local' && changes[L.statsKey(L.dayKey(now()))])) {
+          updateBadge();
+        }
+      });
+      ensureAlarm().catch(() => {});
       updateBadge();
     }
 
-    return { init, updateBadge, maintenance };
+    return { init };
   }
 
-  return { createBackground, badgeText, NOTIFICATION_PREFIX, MAINTENANCE_ALARM };
+  return { createBackground, badgeText, NOTIFICATION_PREFIX };
 });

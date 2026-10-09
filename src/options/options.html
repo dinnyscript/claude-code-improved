@@ -16,6 +16,7 @@
         <label>Colour intensity
           <input type="range" name="colorIntensity" min="0" max="1" step="0.05">
         </label>
+        <label><input type="checkbox" name="colorFavicon"> Colour the tab icon too, so chats are easy to tell apart in the tab strip</label>
       </fieldset>
 
       <fieldset>
@@ -27,11 +28,12 @@
         <label>Daily staring budget
           <input type="number" name="dailyStaringBudgetMin" min="0" max="1440" step="1"> minutes (0 = no budget)
         </label>
+        <label><input type="checkbox" name="budgetAlert"> Notify me once a day when I go over the budget</label>
       </fieldset>
 
       <fieldset>
         <legend>Nudges &amp; notifications</legend>
-        <label><input type="checkbox" name="nudgeEnabled"> Nudge me when I stare at a chat</label>
+        <label><input type="checkbox" name="nudgeEnabled"> Nudge me in the widget when I stare at a chat</label>
         <label>Nudge after
           <input type="number" name="nudgeAfterSec" min="15" max="3600" step="5"> seconds of staring
         </label>

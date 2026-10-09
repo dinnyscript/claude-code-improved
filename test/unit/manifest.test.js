@@ -34,7 +34,7 @@ function htmlScripts(rel) {
 describe('manifest.json', () => {
   it('is a Manifest V3 extension with the permissions it needs and no more', () => {
     assert.equal(manifest.manifest_version, 3);
-    assert.deepEqual([...manifest.permissions].sort(), ['alarms', 'notifications', 'storage']);
+    assert.deepEqual([...manifest.permissions].sort(), ['alarms', 'notifications', 'scripting', 'storage']);
     assert.deepEqual(manifest.host_permissions, ['https://claude.ai/*']);
   });
 

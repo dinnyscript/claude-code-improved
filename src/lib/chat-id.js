@@ -8,7 +8,9 @@
 })(globalThis, function () {
   'use strict';
 
-  const CHAT_PATH = /^\/chat\/([^/]+)\/?$/;
+  // Time on claude.ai pages that aren't a specific chat (new chat, recents, ...).
+  const OTHER_CHAT = '__other__';
+  const CHAT_PATH = /^\/chat\/([A-Za-z0-9-]{1,100})\/?$/;
 
   function parseChatId(href) {
     let url;
@@ -19,8 +21,13 @@
     }
     if (url.hostname !== 'claude.ai' && !url.hostname.endsWith('.claude.ai')) return null;
     const match = CHAT_PATH.exec(url.pathname);
-    return match ? decodeURIComponent(match[1]) : null;
+    return match ? match[1] : null;
   }
 
-  return { parseChatId };
+  // Keys we are willing to store stats under.
+  function isTrackableChatKey(key) {
+    return key === OTHER_CHAT || (typeof key === 'string' && /^[A-Za-z0-9-]{1,100}$/.test(key));
+  }
+
+  return { OTHER_CHAT, parseChatId, isTrackableChatKey };
 });

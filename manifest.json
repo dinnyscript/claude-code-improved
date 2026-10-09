@@ -24,7 +24,7 @@
   "background": {
     "service_worker": "src/background/service-worker.js"
   },
-  "permissions": ["storage", "notifications", "alarms"],
+  "permissions": ["storage", "notifications", "alarms", "scripting"],
   "host_permissions": ["https://claude.ai/*"],
   "content_scripts": [
     {

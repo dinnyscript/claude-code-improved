@@ -6,17 +6,9 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 const { chromium } = require('playwright');
+const mockClaudePage = require('./mock-claude.js');
 
 const EXT = path.resolve(process.env.CCF_EXTENSION_DIR || path.join(__dirname, '../..'));
-
-function fakeClaudePage(url) {
-  const id = new URL(url).pathname.split('/').pop();
-  return `<!doctype html><html><head><title>Chat ${id} - Claude</title></head>
-  <body style="margin:0;background:#fff;font-family:sans-serif">
-    <main id="thread"><p>Hello from mock claude.ai (${id})</p></main>
-    <textarea id="composer"></textarea>
-  </body></html>`;
-}
 
 describe('extension end-to-end', { timeout: 120000 }, () => {
   let context;
@@ -32,7 +24,7 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
       args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`],
     });
     await context.route('https://claude.ai/**', (route) =>
-      route.fulfill({ status: 200, contentType: 'text/html', body: fakeClaudePage(route.request().url()) })
+      route.fulfill({ status: 200, contentType: 'text/html', body: mockClaudePage(route.request().url()) })
     );
     worker = context.serviceWorkers()[0] || (await context.waitForEvent('serviceworker'));
     extensionId = new URL(worker.url()).host;
@@ -48,6 +40,21 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
     await page.goto(`https://claude.ai/chat/${id}`);
     await page.waitForSelector('#ccf-tint', { state: 'attached' });
     return page;
+  }
+
+  // Runs code in the extension's isolated content-script world of a page.
+  async function inContentWorld(page, expression) {
+    const cdp = await context.newCDPSession(page);
+    const contexts = [];
+    cdp.on('Runtime.executionContextCreated', ({ context: c }) => contexts.push(c));
+    await cdp.send('Runtime.enable');
+    const isOurs = (c) => c.auxData && c.auxData.type === 'isolated' && c.name === 'Claude Chat Focus';
+    for (let i = 0; i < 20 && !contexts.some(isOurs); i++) await new Promise((r) => setTimeout(r, 50));
+    const world = contexts.filter(isOurs).at(-1);
+    assert.ok(world, `content script world not found in ${JSON.stringify(contexts.map((c) => c.name))}`);
+    const { exceptionDetails } = await cdp.send('Runtime.evaluate', { expression, contextId: world.id });
+    assert.equal(exceptionDetails, undefined);
+    await cdp.detach();
   }
 
   const themeCss = (page) => page.$eval('#ccf-theme-style', (el) => el.textContent);
@@ -85,7 +92,7 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
       document.querySelector('#thread').append(el);
     });
     await page.waitForFunction(() => document.title.startsWith('⏳ '));
-    await page.evaluate(() => document.querySelector('[data-is-streaming]').setAttribute('data-is-streaming', 'false'));
+    await page.evaluate(() => document.querySelector('[data-is-streaming="true"]').setAttribute('data-is-streaming', 'false'));
     await page.waitForFunction(() => !document.title.startsWith('⏳ '), null, { timeout: 10000 });
     await page.close();
   });
@@ -142,6 +149,86 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
     assert.match(await nudge.textContent(), /staring/i);
     await page.locator('#ccf-widget-host .ccf-dismiss').click();
     await nudge.waitFor({ state: 'hidden' });
+    await page.close();
+  });
+
+  it('keeps the widget clear of the composer and its Send button', async () => {
+    await worker.evaluate(() => chrome.storage.sync.set({ settings: {} }));
+    const page = await openChat('88888888-1111');
+    const widget = await page.locator('#ccf-widget-host .ccf-widget').boundingBox();
+    for (const sel of ['#composer', 'button[aria-label="Send message"]']) {
+      const box = await page.locator(sel).boundingBox();
+      const overlaps =
+        widget.x < box.x + box.width && box.x < widget.x + widget.width && widget.y < box.y + box.height && box.y < widget.y + widget.height;
+      assert.equal(overlaps, false, `widget overlaps ${sel}`);
+    }
+    await page.close();
+  });
+
+  it('remembers where you dragged the widget', async () => {
+    const page = await openChat('88888888-2222');
+    const header = page.locator('#ccf-widget-host .ccf-header');
+    const start = await header.boundingBox();
+    await page.mouse.move(start.x + 20, start.y + 5);
+    await page.mouse.down();
+    await page.mouse.move(start.x - 200, start.y + 205, { steps: 5 });
+    await page.mouse.up();
+    const moved = await page.locator('#ccf-widget-host .ccf-widget').boundingBox();
+    await page.reload();
+    await page.waitForSelector('#ccf-tint', { state: 'attached' });
+    await page.waitForTimeout(500);
+    const restored = await page.locator('#ccf-widget-host .ccf-widget').boundingBox();
+    assert.ok(Math.abs(restored.x - moved.x) < 2 && Math.abs(restored.y - moved.y) < 2, JSON.stringify({ moved, restored }));
+    await worker.evaluate(() => chrome.storage.local.remove('widgetPosition'));
+    await page.close();
+  });
+
+  it('colours the tab icon', async () => {
+    const page = await openChat('88888888-3333');
+    await page.waitForFunction(() => document.querySelector('link[rel~="icon"]').href.startsWith('data:image/svg+xml'));
+    await page.close();
+  });
+
+  it("shows today's staring time on the toolbar badge", async () => {
+    await worker.evaluate(async () => {
+      const d = new Date();
+      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      await chrome.storage.local.set({ [`stats:${day}`]: { chats: { 'badge-test': { idleMs: 7 * 60000 } } } });
+    });
+    let text = '';
+    for (let i = 0; i < 50 && text !== '7m'; i++) {
+      text = await worker.evaluate(() => chrome.action.getBadgeText({}));
+      if (text !== '7m') await new Promise((r) => setTimeout(r, 100));
+    }
+    assert.equal(text, '7m');
+  });
+
+  it('notifies when Claude finishes while you are in another tab', async () => {
+    await worker.evaluate(() => {
+      globalThis.__notified = [];
+      const original = chrome.notifications.create.bind(chrome.notifications);
+      chrome.notifications.create = (id, opts) => {
+        globalThis.__notified.push({ id, ...opts });
+        return original(id, opts);
+      };
+    });
+    const page = await openChat('88888888-5555');
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.setAttribute('data-is-streaming', 'true');
+      document.querySelector('#thread').append(el);
+    });
+    await page.waitForFunction(() => document.title.startsWith('⏳ '));
+    // Playwright keeps every page "visible and focused", so simulate switching
+    // away inside the content script's own world.
+    await inContentWorld(page, 'document.hasFocus = () => false');
+    await page.evaluate(() => document.querySelector('[data-is-streaming="true"]').setAttribute('data-is-streaming', 'false'));
+    await page.waitForFunction(() => document.title.startsWith('✅ '), null, { timeout: 10000 });
+    const notified = (await worker.evaluate(() => globalThis.__notified)).filter((n) => n.id.startsWith('ccf-done:'));
+    assert.equal(notified.length, 1, JSON.stringify(notified));
+    assert.match(notified[0].message, /Chat 88888888-5555/);
+    await inContentWorld(page, 'delete document.hasFocus');
+    await page.waitForFunction(() => !document.title.startsWith('✅ '));
     await page.close();
   });
 });

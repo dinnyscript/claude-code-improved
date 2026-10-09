@@ -1,5 +1,5 @@
 // A small in-memory stand-in for the parts of the chrome.* API the extension uses.
-const { createMemoryStorage } = require('../../src/lib/stats.js');
+const { createMemoryStorage } = require('./memory-storage.js');
 
 function listenerSet() {
   const fns = [];

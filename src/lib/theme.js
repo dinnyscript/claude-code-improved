@@ -52,6 +52,47 @@
     doc.documentElement.dataset.ccfTinted = 'true';
   }
 
+  const FAVICON_ID = 'ccf-favicon';
+  const ORIGINAL_HREF = 'ccfOriginalHref';
+
+  function faviconHref(color) {
+    const svg =
+      "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>" +
+      `<rect width='32' height='32' rx='8' fill='${color}'/>` +
+      "<path d='M8 10a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-6l-5 4v-4a3 3 0 0 1-2-3z' fill='white'/>" +
+      '</svg>';
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  }
+
+  // Replaces the tab icon with a chat-coloured one so tabs are told apart in
+  // the tab strip too. Pass null to put the page's own icons back.
+  function applyFavicon(doc, color) {
+    const links = [...doc.querySelectorAll('link[rel~="icon"]')];
+    if (color === null) {
+      for (const link of links) {
+        if (link.id === FAVICON_ID) link.remove();
+        else if (link.dataset[ORIGINAL_HREF] !== undefined) {
+          link.href = link.dataset[ORIGINAL_HREF];
+          delete link.dataset[ORIGINAL_HREF];
+        }
+      }
+      return;
+    }
+    const href = faviconHref(safe(color, '#888'));
+    if (links.length === 0) {
+      const link = doc.createElement('link');
+      link.id = FAVICON_ID;
+      link.rel = 'icon';
+      (doc.head || doc.documentElement).append(link);
+      links.push(link);
+    }
+    for (const link of links) {
+      if (link.href === href) continue;
+      if (link.id !== FAVICON_ID) link.dataset[ORIGINAL_HREF] = link.href;
+      link.href = href;
+    }
+  }
+
   function detectDarkMode(doc, win) {
     const html = doc.documentElement;
     const mode = html.getAttribute('data-mode') || html.getAttribute('data-theme');
@@ -68,5 +109,5 @@
     return false;
   }
 
-  return { TINT_ID, BAR_ID, STYLE_ID, applyChatColor, detectDarkMode };
+  return { TINT_ID, BAR_ID, STYLE_ID, applyChatColor, applyFavicon, detectDarkMode };
 });

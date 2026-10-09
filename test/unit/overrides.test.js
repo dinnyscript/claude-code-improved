@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { createMemoryStorage } = require('../../src/lib/stats.js');
+const { createMemoryStorage } = require('../helpers/memory-storage.js');
 const { getHueOverrides, setHueOverride, clearHueOverride, OVERRIDES_KEY } = require('../../src/lib/overrides.js');
 
 describe('hue overrides', () => {

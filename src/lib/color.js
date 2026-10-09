@@ -45,7 +45,7 @@
     const k = clamp01(intensity);
     const saturation = Math.round(20 + 60 * k);
     const background = dark
-      ? `hsl(${hue} ${Math.round(saturation * 0.6)}% ${Math.round(9 + 6 * k)}%)`
+      ? `hsl(${hue} ${Math.round(saturation * 0.6)}% ${Math.round(4 + 6 * k)}%)`
       : `hsl(${hue} ${saturation}% ${Math.round(97 - 8 * k)}%)`;
     const accent = dark ? `hsl(${hue} 70% 62%)` : `hsl(${hue} 65% 42%)`;
     return { hue, background, accent };

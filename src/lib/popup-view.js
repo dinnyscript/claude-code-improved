@@ -21,28 +21,53 @@
 })(globalThis, function (L) {
   'use strict';
 
-  const OTHER_CHAT = '__other__';
   const MAX_CHATS = 8;
+  const STREAK_WINDOW_DAYS = 30;
+  const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  function weekday(day) {
+    const [y, m, d] = day.split('-').map(Number);
+    return WEEKDAYS[new Date(y, m - 1, d).getDay()];
+  }
+
+  // Consecutive days, ending today, that stayed within the staring budget.
+  // Days without any claude.ai use neither count nor break the streak.
+  function budgetStreak(days, budgetMs) {
+    if (!(budgetMs > 0)) return 0;
+    let streak = 0;
+    for (let i = days.length - 1; i >= 0; i--) {
+      const { activeMs, staringMs } = days[i].totals;
+      if (activeMs + staringMs === 0) continue;
+      if (staringMs > budgetMs) break;
+      streak++;
+    }
+    return streak;
+  }
 
   async function buildPopupModel({ local, sync, activeUrl, now = Date.now() }) {
-    const today = new Date(now);
-    const [settings, overrides, week] = await Promise.all([
+    const [settings, overrides, days] = await Promise.all([
       L.readSettings(sync),
       L.getHueOverrides(local),
-      L.recentDays(local, 7, today),
+      L.recentDays(local, STREAK_WINDOW_DAYS, new Date(now)),
     ]);
+    const budgetMs = settings.dailyStaringBudgetMin * 60000;
     const chatId = L.parseChatId(activeUrl || '');
-    const currentChat = chatId
-      ? { chatId, hue: L.chatHue(chatId, overrides[chatId]), overridden: chatId in overrides }
-      : null;
+    const overridden = Boolean(chatId) && Object.prototype.hasOwnProperty.call(overrides, chatId);
+    const currentChat = chatId ? { chatId, hue: L.chatHue(chatId, overridden ? overrides[chatId] : undefined), overridden } : null;
+    const week = days.slice(-7);
     return {
       settings,
       overrides,
       week,
       today: week[week.length - 1],
-      budgetMs: settings.dailyStaringBudgetMin * 60000,
+      budgetMs,
+      streakDays: budgetStreak(days, budgetMs),
       currentChat,
     };
+  }
+
+  function ownHue(overrides, chatId) {
+    return Object.prototype.hasOwnProperty.call(overrides, chatId) ? overrides[chatId] : undefined;
   }
 
   function h(doc, tag, attrs = {}, children = []) {
@@ -102,6 +127,12 @@
         h(doc, 'div', { class: 'bar' }, [fill]),
       ]);
       budgetEl.classList.toggle('over', ratio > 1);
+      if (model.streakDays > 0) {
+        const n = model.streakDays;
+        budgetEl.append(
+          h(doc, 'div', { id: 'streak', text: `\u{1F525} ${n} day${n === 1 ? '' : 's'} in a row within budget` })
+        );
+      }
     }
 
     const max = Math.max(1, ...model.week.map((d) => d.totals.activeMs + d.totals.staringMs));
@@ -123,6 +154,12 @@
     const week = h(doc, 'section', { class: 'week' }, [
       h(doc, 'h2', { text: 'Last 7 days' }),
       h(doc, 'div', { class: 'bars' }, bars),
+      h(
+        doc,
+        'div',
+        { class: 'week-days' },
+        model.week.map((d) => h(doc, 'span', { class: 'week-day', text: weekday(d.day) }))
+      ),
       h(doc, 'div', { class: 'legend' }, [
         h(doc, 'span', { class: 'key active', text: 'active' }),
         h(doc, 'span', { class: 'key staring', text: 'staring' }),
@@ -131,11 +168,11 @@
 
     const list = h(doc, 'ul', { class: 'chats' });
     for (const chat of chats.slice(0, MAX_CHATS)) {
-      const isOther = chat.chatId === OTHER_CHAT;
+      const isOther = chat.chatId === L.OTHER_CHAT;
       const dot = h(doc, 'span', { class: 'dot' });
       dot.style.background = isOther
         ? '#9e9e9e'
-        : L.chatPalette(chat.chatId, { intensity: 1, hueOverride: model.overrides[chat.chatId] }).accent;
+        : L.chatPalette(chat.chatId, { hueOverride: ownHue(model.overrides, chat.chatId) }).accent;
       const row = h(doc, 'li', { class: `chat-row${isOther ? ' other' : ''}` }, [
         dot,
         h(doc, 'span', { class: 'chat-title', text: isOther ? 'Other claude.ai pages' : chat.title || 'Untitled chat' }),
@@ -148,9 +185,11 @@
       if (!isOther) row.addEventListener('click', () => handlers.onOpenChat?.(chat.chatId));
       list.append(row);
     }
+    const hidden = chats.length - MAX_CHATS;
     const chatsEl = h(doc, 'section', { class: 'chat-list' }, [
       h(doc, 'h2', { text: "Today's chats (active / staring)" }),
       chats.length ? list : h(doc, 'p', { class: 'empty', text: 'No chat time recorded yet today.' }),
+      hidden > 0 ? h(doc, 'p', { class: 'chat-more', text: `+ ${hidden} more (export CSV in Settings for all)` }) : null,
     ]);
 
     const current = h(doc, 'section', { id: 'current-chat' });
@@ -158,7 +197,7 @@
       const { chatId, hue, overridden } = model.currentChat;
       const swatch = h(doc, 'span', { class: 'swatch' });
       const paint = (value) => {
-        swatch.style.background = L.chatPalette(chatId, { intensity: 1, hueOverride: value }).accent;
+        swatch.style.background = L.chatPalette(chatId, { hueOverride: value }).accent;
       };
       paint(hue);
       const slider = h(doc, 'input', { id: 'hue-slider', type: 'range', min: '0', max: '359', step: '1', 'aria-label': 'Chat hue' });
@@ -186,5 +225,5 @@
     container.append(header, score, totalsEl, budgetEl, week, chatsEl, current);
   }
 
-  return { buildPopupModel, renderPopup };
+  return { buildPopupModel, renderPopup, budgetStreak };
 });

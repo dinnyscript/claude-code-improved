@@ -7,8 +7,8 @@ const {
   recentDays,
   pruneOldDays,
   statsKey,
-  createMemoryStorage,
 } = require('../../src/lib/stats.js');
+const { createMemoryStorage } = require('../helpers/memory-storage.js');
 
 const S = 1000;
 const MIN = 60 * S;

@@ -11,6 +11,8 @@
   'use strict';
 
   const HOST_ID = 'ccf-widget-host';
+  // Top-right, below claude.ai's header, so it never covers the composer or its Send button.
+  const DEFAULT_POSITION = Object.freeze({ top: 64, right: 16 });
 
   const STATE_LABELS = {
     active: 'Active',
@@ -22,31 +24,35 @@
   const CSS = `
     :host { all: initial; }
     .ccf-widget {
-      position: fixed; right: 16px; bottom: 16px; z-index: 2147483646;
-      width: 260px; box-sizing: border-box; padding: 10px 12px;
+      --ccf-fg: #1f1f1f; --ccf-bg: #ffffff; --ccf-line: rgba(0,0,0,0.12); --ccf-muted: #5f5f5f;
+      position: fixed; z-index: 2147483646;
+      width: 260px; box-sizing: border-box; padding: 8px 12px 10px;
       font: 12px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
-      color: #1f1f1f; background: rgba(255,255,255,0.94);
-      border: 1px solid rgba(0,0,0,0.12); border-left: 4px solid var(--ccf-accent, #888);
+      color: var(--ccf-fg); background: var(--ccf-bg);
+      border: 1px solid var(--ccf-line); border-left: 4px solid var(--ccf-accent, #888);
       border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     }
-    @media (prefers-color-scheme: dark) {
-      .ccf-widget { color: #eee; background: rgba(32,32,32,0.94); border-color: rgba(255,255,255,0.14); }
+    .ccf-widget[data-theme="dark"] {
+      --ccf-fg: #ececec; --ccf-bg: #262624; --ccf-line: rgba(255,255,255,0.14); --ccf-muted: #b0b0b0;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
     }
-    .ccf-header { display: flex; align-items: center; gap: 6px; }
+    .ccf-header { display: flex; align-items: center; gap: 6px; cursor: grab; user-select: none; touch-action: none; }
+    .ccf-widget.dragging .ccf-header { cursor: grabbing; }
     .ccf-dot { width: 8px; height: 8px; border-radius: 50%; background: #9e9e9e; flex: none; }
     [data-state="active"] .ccf-dot { background: #2e7d32; }
     [data-state="waiting"] .ccf-dot { background: #f9a825; }
     [data-state="idle"] .ccf-dot { background: #c62828; }
-    .ccf-state { font-weight: 600; }
-    .ccf-streak { margin-left: auto; font-variant-numeric: tabular-nums; }
+    .ccf-state { font-weight: 600; white-space: nowrap; }
+    .ccf-streak { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .ccf-toggle {
-      margin-left: 4px; border: 0; background: transparent; color: inherit; cursor: pointer;
+      margin-left: auto; border: 0; background: transparent; color: inherit; cursor: pointer;
       font: inherit; font-size: 14px; line-height: 1; padding: 0 2px;
     }
-    .ccf-body { margin-top: 6px; display: grid; gap: 2px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+    .ccf-streak:not([hidden]) + .ccf-toggle { margin-left: 4px; }
+    .ccf-body { margin-top: 6px; display: grid; gap: 2px; color: var(--ccf-muted); font-variant-numeric: tabular-nums; }
     .ccf-widget.collapsed { width: auto; }
     .ccf-widget.collapsed .ccf-body, .ccf-widget.collapsed .ccf-nudge { display: none; }
-    .ccf-widget.over .ccf-today { color: #c62828; font-weight: 600; }
+    .ccf-widget.over .ccf-today { color: #d32f2f; font-weight: 600; }
     .ccf-nudge {
       margin-top: 8px; padding: 8px; border-radius: 8px;
       background: rgba(198,40,40,0.08); border: 1px solid rgba(198,40,40,0.35);
@@ -56,7 +62,7 @@
     .ccf-actions { display: flex; gap: 6px; margin-top: 6px; }
     .ccf-actions button {
       font: inherit; cursor: pointer; border-radius: 6px; padding: 3px 8px;
-      border: 1px solid rgba(0,0,0,0.2); background: transparent; color: inherit;
+      border: 1px solid var(--ccf-line); background: transparent; color: inherit;
     }
     .ccf-actions .ccf-dismiss { background: #c62828; border-color: #c62828; color: #fff; }
   `;
@@ -76,7 +82,6 @@
     const style = el(doc, 'style', null, CSS);
 
     const box = el(doc, 'div', 'ccf-widget');
-    box.setAttribute('role', 'status');
     const header = el(doc, 'div', 'ccf-header');
     const stateLabel = el(doc, 'span', 'ccf-state');
     const streak = el(doc, 'span', 'ccf-streak');
@@ -106,6 +111,43 @@
     shadow.append(style, box);
     (doc.body || doc.documentElement).append(host);
 
+    const win = doc.defaultView;
+    function setPosition({ top, right }) {
+      const maxTop = Math.max(0, (win ? win.innerHeight : 600) - 40);
+      const maxRight = Math.max(0, (win ? win.innerWidth : 800) - 80);
+      const pos = {
+        top: Math.round(Math.min(maxTop, Math.max(0, Number(top) || 0))),
+        right: Math.round(Math.min(maxRight, Math.max(0, Number(right) || 0))),
+      };
+      box.style.top = `${pos.top}px`;
+      box.style.right = `${pos.right}px`;
+      return pos;
+    }
+    setPosition(DEFAULT_POSITION);
+
+    // Drag by the header to move the widget out of the way.
+    let drag = null;
+    header.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target === toggle) return;
+      drag = { x: e.clientX, y: e.clientY, top: parseFloat(box.style.top), right: parseFloat(box.style.right), moved: false };
+      box.classList.add('dragging');
+      e.preventDefault();
+    });
+    const onPointerMove = (e) => {
+      if (!drag) return;
+      drag.moved = true;
+      setPosition({ top: drag.top + (e.clientY - drag.y), right: drag.right - (e.clientX - drag.x) });
+    };
+    const onPointerUp = () => {
+      if (!drag) return;
+      const moved = drag.moved;
+      drag = null;
+      box.classList.remove('dragging');
+      if (moved) handlers.onMove?.({ top: parseFloat(box.style.top), right: parseFloat(box.style.right) });
+    };
+    win?.addEventListener('pointermove', onPointerMove);
+    win?.addEventListener('pointerup', onPointerUp);
+
     toggle.addEventListener('click', () => {
       const collapsed = box.classList.toggle('collapsed');
       toggle.textContent = collapsed ? '+' : '–';
@@ -124,7 +166,9 @@
     function render(view) {
       const state = view.state || 'active';
       box.dataset.state = state;
+      box.dataset.theme = view.dark ? 'dark' : 'light';
       if (view.accent) box.style.setProperty('--ccf-accent', view.accent);
+      else box.style.removeProperty('--ccf-accent');
       stateLabel.textContent = STATE_LABELS[state] || state;
 
       streak.hidden = !(view.staringStreakMs > 0);
@@ -144,8 +188,8 @@
     }
 
     return {
-      host,
       render,
+      setPosition,
       showNudge({ title, body: text }) {
         nudgeTitle.textContent = title;
         nudgeBody.textContent = text;
@@ -160,10 +204,12 @@
         toggle.textContent = collapsed ? '+' : '–';
       },
       destroy() {
+        win?.removeEventListener('pointermove', onPointerMove);
+        win?.removeEventListener('pointerup', onPointerUp);
         host.remove();
       },
     };
   }
 
-  return { HOST_ID, STATE_LABELS, createWidget };
+  return { HOST_ID, createWidget };
 });

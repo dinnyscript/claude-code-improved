@@ -1,6 +1,7 @@
 /*
  * Classifies each moment a chat tab is open into one of:
- *   active  - you interacted recently (typing, scrolling, clicking)
+ *   active  - you interacted recently (typing, scrolling, clicking) or are
+ *             within the reading allowance for a reply that just arrived
  *   waiting - you are not interacting and Claude is generating (watching it type)
  *   idle    - you are not interacting and nothing is happening (staring)
  *   hidden  - the tab is in the background or the window is unfocused
@@ -23,10 +24,13 @@
     if (!signals.visible || !signals.focused) return 'hidden';
     const last = Number.isFinite(signals.lastInteractionAt) ? signals.lastInteractionAt : -Infinity;
     if (now - last <= idleAfterMs) return 'active';
+    if (Number.isFinite(signals.readingUntil) && now <= signals.readingUntil) return 'active';
     return signals.generating ? 'waiting' : 'idle';
   }
 
-  function createTracker({ idleAfterMs = 30000, maxGapMs = 60000 } = {}) {
+  // maxGapMs: longer gaps between updates (e.g. the laptop slept) are dropped. It sits
+  // above Chrome's one-update-per-minute throttling of background tabs.
+  function createTracker({ idleAfterMs = 30000, maxGapMs = 90000 } = {}) {
     let opts = { idleAfterMs };
     let lastTick = null;
     let current = null;

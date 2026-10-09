@@ -127,6 +127,7 @@ describe('background', () => {
 
   it('schedules and runs pruning of old stats', async () => {
     const { fake } = setup({ local: { 'stats:2020-01-01': { chats: {} }, 'stats:2026-10-09': { chats: {} } } });
+    await flush();
     assert.ok(fake.alarms.some((a) => a.name === 'ccf-maintenance'));
     for (const fn of fake.chrome.alarms.onAlarm.fns) fn({ name: 'ccf-maintenance' });
     await flush();
@@ -183,5 +184,16 @@ describe('background review fixes', () => {
       { tabId: 1, files: ['a.js', 'b.js'] },
       { tabId: 2, files: ['a.js', 'b.js'] },
     ]);
+  });
+});
+
+describe('badge freshness', () => {
+  it('clears the badge when stats are deleted from the options page', async () => {
+    const { fake } = setup({ local: { 'stats:2026-10-09': { chats: { c: { idleMs: 9 * MIN } } } } });
+    await flush();
+    assert.equal(fake.badge.text, '9m');
+    await fake.chrome.storage.local.remove(['stats:2026-10-09']);
+    await flush();
+    assert.equal(fake.badge.text, '');
   });
 });

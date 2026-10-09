@@ -425,11 +425,6 @@ describe('controller review fixes', () => {
   let env;
   afterEach(() => env?.ctl.destroy());
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const sumBy = (deltas, field) => {
-    const out = {};
-    for (const d of deltas) out[d.chatId] = (out[d.chatId] || 0) + d.delta[field];
-    return out;
-  };
 
   describe('chat titles', () => {
     it('does not give the previous chat title to a chat you just navigated to', async () => {
