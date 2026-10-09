@@ -34,6 +34,22 @@ describe('chatHue', () => {
     assert.ok(buckets.size >= 10, `only ${buckets.size} of 12 hue buckets used`);
   });
 
+  it('gives near-identical ids clearly different hues', () => {
+    const dist = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+    let total = 0;
+    let close = 0;
+    const n = 300;
+    for (let i = 0; i < n; i++) {
+      const d = dist(chatHue(`chat-${i}`), chatHue(`chat-${i + 1}`));
+      total += d;
+      if (d < 20) close++;
+    }
+    // Uniformly random hues average 90 degrees apart; ~11% of pairs land within 20 degrees.
+    assert.ok(total / n > 75, `average distance ${total / n}`);
+    assert.ok(close / n < 0.2, `${close} of ${n} neighbouring ids got near-identical hues`);
+    assert.ok(dist(chatHue('chat-a'), chatHue('chat-b')) >= 20);
+  });
+
   it('uses an override when one is given', () => {
     assert.equal(chatHue('anything', 200), 200);
   });

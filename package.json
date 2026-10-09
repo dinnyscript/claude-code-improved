@@ -9,10 +9,11 @@
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**' 'test/unit/**/*.test.js'",
     "test:e2e": "node --test --test-concurrency=1 'test/e2e/**/*.test.js'",
     "test:all": "npm test && npm run test:e2e",
-    "lint": "eslint src test",
+    "lint": "eslint src test scripts eslint.config.js",
     "package": "node scripts/package.js"
   },
   "devDependencies": {
+    "eslint": "^10.1.0",
     "jsdom": "^26.1.0",
     "playwright": "^1.56.1"
   }

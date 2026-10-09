@@ -80,11 +80,11 @@
         h(doc, 'span', { id: 'today-staring', text: L.formatDuration(totals.staringMs) }),
       ]),
       h(doc, 'div', { class: 'stat sub' }, [
-        h(doc, 'span', { class: 'label', text: 'watching Claude type' }),
+        h(doc, 'span', { class: 'label', text: '\u21b3 watching Claude' }),
         h(doc, 'span', { id: 'today-waiting', text: L.formatDuration(totals.waitingMs) }),
       ]),
       h(doc, 'div', { class: 'stat sub' }, [
-        h(doc, 'span', { class: 'label', text: 'idle' }),
+        h(doc, 'span', { class: 'label', text: '\u21b3 idle' }),
         h(doc, 'span', { id: 'today-idle', text: L.formatDuration(totals.idleMs) }),
       ]),
     ]);

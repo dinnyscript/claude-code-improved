@@ -7,7 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { chromium } = require('playwright');
 
-const EXT = path.resolve(__dirname, '../..');
+const EXT = path.resolve(process.env.CCF_EXTENSION_DIR || path.join(__dirname, '../..'));
 
 function fakeClaudePage(url) {
   const id = new URL(url).pathname.split('/').pop();
