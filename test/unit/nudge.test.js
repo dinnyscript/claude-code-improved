@@ -62,3 +62,13 @@ describe('nudgeMessage', () => {
     assert.notEqual(a.body, b.body);
   });
 });
+
+describe('nudgeMessage without completion notifications', () => {
+  it('does not promise a notification that will not come', () => {
+    for (const level of [1, 2]) {
+      const m = nudgeMessage({ level, state: 'waiting', streakMs: 120 * S, notify: false });
+      assert.doesNotMatch(m.body, /notif/i);
+      assert.match(m.body, /come back|check back|switch/i);
+    }
+  });
+});

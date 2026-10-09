@@ -338,7 +338,9 @@
       const level = nudger.check(streak);
       if (streak === 0) widget?.hideNudge();
       else if (level && t >= snoozedUntil && widget) {
-        widget.showNudge(L.nudgeMessage({ level, state: tracker.state(), streakMs: streak }));
+        widget.showNudge(
+          L.nudgeMessage({ level, state: tracker.state(), streakMs: streak, notify: settings.notifyOnComplete })
+        );
       }
 
       refreshAppearance();

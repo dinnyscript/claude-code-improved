@@ -35,15 +35,15 @@
     'This tab is eating your time. Close it and come back when you have a next step.',
   ];
 
-  function nudgeMessage({ level, state, streakMs }) {
+  function nudgeMessage({ level, state, streakMs, notify = true }) {
     const duration = fmt.formatDuration(streakMs);
     if (state === 'waiting') {
+      const then = notify
+        ? 'you\'ll get a notification when the reply is done.'
+        : 'check back in a few minutes.';
       return {
         title: `You've watched Claude type for ${duration}`,
-        body:
-          level > 1
-            ? 'Watching won\'t make it faster. Switch tasks - you\'ll get a notification when it is done.'
-            : 'Switch to something else while you wait - you\'ll get a notification when the reply is done.',
+        body: level > 1 ? `Watching won't make it faster. Switch tasks - ${then}` : `Switch to something else while you wait - ${then}`,
       };
     }
     const body = IDLE_BODIES[Math.min(IDLE_BODIES.length, Math.max(1, level)) - 1];
