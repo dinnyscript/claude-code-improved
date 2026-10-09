@@ -48,6 +48,16 @@
     });
   }
 
+  // Goes through the same queue as addDelta, so a write already in flight
+  // can't put deleted stats back.
+  function clearAllStats(storage, extraKeys = []) {
+    return serialized(storage, async () => {
+      const stale = Object.keys(await storage.get(null)).filter((k) => k.startsWith(PREFIX));
+      if (stale.length || extraKeys.length) await storage.remove([...stale, ...extraKeys]);
+      return stale;
+    });
+  }
+
   function summarizeDay(dayStats) {
     const totals = { ...emptyTotals(), staringMs: 0 };
     const chats = [];
@@ -89,5 +99,5 @@
     return stale;
   }
 
-  return { statsKey, emptyTotals, addDelta, summarizeDay, recentDays, pruneOldDays };
+  return { statsKey, emptyTotals, addDelta, clearAllStats, summarizeDay, recentDays, pruneOldDays };
 });

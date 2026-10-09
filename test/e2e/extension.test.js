@@ -190,17 +190,17 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
   });
 
   it("shows today's staring time on the toolbar badge", async () => {
-    await worker.evaluate(async () => {
-      const d = new Date();
-      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      await chrome.storage.local.set({ [`stats:${day}`]: { chats: { 'badge-test': { idleMs: 7 * 60000 } } } });
-    });
+    // Write through the worker's own stats queue, as tabs do, so we can't race their flushes.
+    await worker.evaluate(() =>
+      globalThis.CCF.addDelta(chrome.storage.local, globalThis.CCF.dayKey(new Date()), 'badge-test', { idleMs: 7 * 60000 })
+    );
     let text = '';
-    for (let i = 0; i < 50 && text !== '7m'; i++) {
+    for (let i = 0; i < 50 && !/^\d+m$/.test(text); i++) {
       text = await worker.evaluate(() => chrome.action.getBadgeText({}));
-      if (text !== '7m') await new Promise((r) => setTimeout(r, 100));
+      if (!/^\d+m$/.test(text)) await new Promise((r) => setTimeout(r, 100));
     }
-    assert.equal(text, '7m');
+    assert.match(text, /^\d+m$/);
+    assert.ok(parseInt(text, 10) >= 7, text);
   });
 
   it('notifies when Claude finishes while you are in another tab', async () => {
@@ -229,6 +229,17 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
     assert.match(notified[0].message, /Chat 88888888-5555/);
     await inContentWorld(page, 'delete document.hasFocus');
     await page.waitForFunction(() => !document.title.startsWith('✅ '));
+    await page.close();
+  });
+
+  it('deletes all stats from the options page', async () => {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+    page.on('dialog', (d) => d.accept());
+    await page.click('#reset-stats');
+    await page.waitForFunction(() => document.getElementById('status').textContent === 'Stats deleted');
+    const keys = Object.keys(await worker.evaluate(() => chrome.storage.local.get(null)));
+    assert.deepEqual(keys.filter((k) => k.startsWith('stats:')), []);
     await page.close();
   });
 });

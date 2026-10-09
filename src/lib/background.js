@@ -101,6 +101,13 @@
       let work;
       if (msg.type === 'stats-delta') work = handleStatsDelta(msg);
       else if (msg.type === 'response-complete') work = handleResponseComplete(msg, sender || {});
+      else if (msg.type === 'reset-stats') {
+        // Only the extension's own pages (options), never a claude.ai tab.
+        const fromExtensionPage = Boolean(sender && typeof sender.url === 'string' && sender.url.startsWith(chrome.runtime.getURL('')));
+        work = fromExtensionPage
+          ? L.clearAllStats(local, [BUDGET_ALERTED_KEY]).then(() => ({ ok: true }))
+          : Promise.resolve({ ok: false, error: 'not allowed' });
+      }
       else return false;
       work.then(sendResponse, (err) => sendResponse({ ok: false, error: String(err && err.message) }));
       return true;

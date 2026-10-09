@@ -35,10 +35,9 @@
 
   document.getElementById('reset-stats').addEventListener('click', async () => {
     if (!confirm('Delete all recorded time statistics? This cannot be undone.')) return;
-    const all = await chrome.storage.local.get(null);
-    // Also forget today's over-budget alert so it can fire again on the fresh numbers.
-    await chrome.storage.local.remove([...Object.keys(all).filter((k) => k.startsWith('stats:')), 'budgetAlertedDay']);
-    flash('Stats deleted');
+    // The background owns all stats writes; deleting there can't race a tab's update.
+    const res = await chrome.runtime.sendMessage({ type: 'reset-stats' });
+    flash(res && res.ok ? 'Stats deleted' : 'Could not delete stats');
   });
 
   load();

@@ -197,3 +197,20 @@ describe('badge freshness', () => {
     assert.equal(fake.badge.text, '');
   });
 });
+
+describe('reset-stats message', () => {
+  it('deletes all stats and the budget alert marker from an extension page', async () => {
+    const { fake } = setup({ local: { 'stats:2026-10-09': { chats: {} }, budgetAlertedDay: '2026-10-09', hueOverrides: {} } });
+    const optionsTab = { id: 'fake-extension-id', url: 'chrome-extension://fake-extension-id/src/options/options.html', tab: { id: 5 } };
+    const res = await fake.chrome.runtime.sendMessage({ type: 'reset-stats' }, optionsTab);
+    assert.deepEqual(res, { ok: true });
+    assert.deepEqual(Object.keys(await fake.chrome.storage.local.get(null)), ['hueOverrides']);
+  });
+
+  it('is refused from content scripts', async () => {
+    const { fake } = setup({ local: { 'stats:2026-10-09': { chats: {} } } });
+    const res = await fake.chrome.runtime.sendMessage({ type: 'reset-stats' }, { ...sender(), url: 'https://claude.ai/chat/x' });
+    assert.equal(res.ok, false);
+    assert.ok('stats:2026-10-09' in (await fake.chrome.storage.local.get(null)));
+  });
+});

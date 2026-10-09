@@ -116,3 +116,22 @@ describe('pruneOldDays', () => {
     assert.deepEqual(Object.keys(all).sort(), ['stats:2026-10-08', 'unrelated']);
   });
 });
+
+describe('clearAllStats', () => {
+  const { clearAllStats } = require('../../src/lib/stats.js');
+
+  it('waits for in-flight writes so deleted stats cannot come back', async () => {
+    const storage = createMemoryStorage({ latencyMs: 2 });
+    const write = addDelta(storage, '2026-10-09', 'c', { activeMs: 1 });
+    const cleared = clearAllStats(storage);
+    await Promise.all([write, cleared]);
+    const all = await storage.get(null);
+    assert.deepEqual(Object.keys(all).filter((k) => k.startsWith('stats:')), []);
+  });
+
+  it('keeps settings-like keys and returns what it removed', async () => {
+    const storage = createMemoryStorage({ initial: { 'stats:2026-10-08': {}, hueOverrides: { a: 1 } } });
+    assert.deepEqual(await clearAllStats(storage), ['stats:2026-10-08']);
+    assert.deepEqual(Object.keys(await storage.get(null)), ['hueOverrides']);
+  });
+});
