@@ -128,3 +128,14 @@ describe('createTracker', () => {
     assert.equal(t.totals().idleMs, 10 * S);
   });
 });
+
+describe('createTracker peek', () => {
+  it('reports pending time without draining it', () => {
+    const t = createTracker({ idleAfterMs: 30 * S });
+    t.update(0, { ...base, lastInteractionAt: 0 });
+    t.update(5 * S, { ...base, lastInteractionAt: 0 });
+    assert.equal(t.peek().activeMs, 5 * S);
+    assert.equal(t.peek().activeMs, 5 * S);
+    assert.equal(t.drain().activeMs, 5 * S);
+  });
+});
