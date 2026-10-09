@@ -132,4 +132,46 @@ describe('renderPopup', () => {
     $('#open-options').click();
     assert.equal(opened, 1);
   });
+
+  it('does not treat inherited object keys as colour overrides', async () => {
+    const m = await model({ activeUrl: 'https://claude.ai/chat/constructor' });
+    assert.equal(m.currentChat.overridden, false);
+    assert.equal(typeof m.currentChat.hue, 'number');
+  });
+
+  it('labels the week bars with weekdays', async () => {
+    const { $$ } = render(await model({ local: todayStats }));
+    const labels = $$('.week-day').map((d) => d.textContent);
+    assert.equal(labels.length, 7);
+    assert.equal(labels[6], 'Fri'); // 2026-10-09 is a Friday
+  });
+
+  it('says how many more chats there are beyond the list', async () => {
+    const chats = {};
+    for (let i = 0; i < 11; i++) chats[`c${i}`] = { activeMs: (i + 1) * MIN, title: `Chat ${i}` };
+    const { $$, $ } = render(await model({ local: { 'stats:2026-10-09': { chats } } }));
+    assert.equal($$('.chat-row').length, 8);
+    assert.match($('.chat-more').textContent, /3 more/);
+  });
+
+  it('shows a streak of days within the staring budget', async () => {
+    const local = {
+      'stats:2026-10-05': { chats: { a: { activeMs: 10 * MIN, idleMs: 40 * MIN } } }, // over 30m budget
+      'stats:2026-10-06': { chats: { a: { activeMs: 10 * MIN, idleMs: 5 * MIN } } },
+      'stats:2026-10-07': { chats: { a: { activeMs: 10 * MIN, idleMs: 5 * MIN } } },
+      // 10-08: no claude.ai use at all -> does not break the streak
+      'stats:2026-10-09': { chats: { a: { activeMs: 10 * MIN, idleMs: 1 * MIN } } },
+    };
+    const m = await model({ local });
+    assert.equal(m.streakDays, 3);
+    const { $ } = render(m);
+    assert.match($('#streak').textContent, /3 days/);
+  });
+
+  it('has no streak when today is already over budget', async () => {
+    const m = await model({ local: { 'stats:2026-10-09': { chats: { a: { idleMs: 31 * MIN } } } } });
+    assert.equal(m.streakDays, 0);
+    const { $ } = render(m);
+    assert.equal($('#streak'), null);
+  });
 });

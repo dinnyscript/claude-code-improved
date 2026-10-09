@@ -139,3 +139,21 @@ describe('createTracker peek', () => {
     assert.equal(t.drain().activeMs, 5 * S);
   });
 });
+
+describe('review fixes', () => {
+  it('counts time inside a reading allowance as active', () => {
+    const opts = { idleAfterMs: 10 * S };
+    assert.equal(classify(60 * S, { ...base, lastInteractionAt: 0, readingUntil: 70 * S }, opts), 'active');
+    assert.equal(classify(71 * S, { ...base, lastInteractionAt: 0, readingUntil: 70 * S }, opts), 'idle');
+    assert.equal(classify(60 * S, { ...base, visible: false, readingUntil: 70 * S }, opts), 'hidden');
+  });
+
+  it('tolerates background-tab timer throttling of up to a minute and a half', () => {
+    const t = createTracker({ idleAfterMs: 30 * S });
+    const sig = { ...base, visible: false };
+    t.update(0, sig);
+    t.update(61 * S, sig);
+    t.update(150 * S, sig);
+    assert.equal(t.totals().hiddenMs, 150 * S);
+  });
+});

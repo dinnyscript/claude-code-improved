@@ -97,4 +97,14 @@ describe('chatPalette', () => {
   it('honours a hue override', () => {
     assert.equal(chatPalette('chat-a', { hueOverride: 120 }).hue, 120);
   });
+
+  it('keeps the dark-mode tint subtle so text stays readable', () => {
+    const light = (p) => Number(p.background.split(' ')[2].replace('%)', ''));
+    assert.ok(light(chatPalette('c', { dark: true, intensity: 0.6 })) <= 9);
+    assert.ok(light(chatPalette('c', { dark: true, intensity: 1 })) <= 11);
+  });
+
+  it('makes a favicon accent at full strength regardless of intensity', () => {
+    assert.equal(chatPalette('c', { intensity: 0 }).accent, chatPalette('c', { intensity: 1 }).accent);
+  });
 });

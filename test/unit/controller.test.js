@@ -10,7 +10,7 @@ const { STATUS_PREFIX } = require('../../src/lib/title.js');
 
 const S = 1000;
 
-function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {}, start = 1_000_000 } = {}) {
+function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {}, start = 1_000_000, options = {} } = {}) {
   const dom = new JSDOM('<!doctype html><html><head><title>Chat A - Claude</title></head><body><main></main></body></html>', { url });
   const { window } = dom;
   const { document } = window;
@@ -20,7 +20,7 @@ function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {}, s
   document.hasFocus = () => focused;
   const fake = createFakeChrome({ sync, local });
   let t = start;
-  const ctl = createController({ window, document, chrome: fake.chrome, now: () => t, autoTick: false });
+  const ctl = createController({ window, document, chrome: fake.chrome, now: () => t, autoTick: false, ...options });
   const env = {
     window,
     document,
@@ -41,18 +41,25 @@ function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {}, s
     },
     shadow: () => document.getElementById(HOST_ID)?.shadowRoot,
     css: () => document.getElementById(STYLE_ID)?.textContent || '',
-    stream(on) {
+    stream(on, text = '') {
       const existing = document.querySelector('[data-is-streaming]');
       if (on && !existing) {
         const el = document.createElement('div');
         el.setAttribute('data-is-streaming', 'true');
+        el.textContent = text;
         document.querySelector('main').append(el);
+      } else if (on && existing) {
+        existing.setAttribute('data-is-streaming', 'true');
       } else if (!on && existing) {
+        if (text) existing.textContent = text;
         existing.setAttribute('data-is-streaming', 'false');
       }
     },
     deltas: () => fake.sent.filter((m) => m.type === 'stats-delta'),
     now: () => t,
+    setTime(ms) {
+      t = ms;
+    },
   };
   return env;
 }
@@ -410,6 +417,202 @@ describe('controller', () => {
       };
       env.advance(5 * S);
       await assert.doesNotReject(() => env.ctl.flush());
+    });
+  });
+});
+
+describe('controller review fixes', () => {
+  let env;
+  afterEach(() => env?.ctl.destroy());
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const sumBy = (deltas, field) => {
+    const out = {};
+    for (const d of deltas) out[d.chatId] = (out[d.chatId] || 0) + d.delta[field];
+    return out;
+  };
+
+  describe('chat titles', () => {
+    it('does not give the previous chat title to a chat you just navigated to', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.advance(2 * S);
+      env.window.history.pushState({}, '', '/chat/chat-b'); // claude.ai updates the title a moment later
+      env.advance(S);
+      await env.ctl.flush();
+      const byChat = Object.fromEntries(env.deltas().map((d) => [d.chatId, d.title]));
+      assert.equal(byChat['chat-a'], 'Chat A');
+      assert.equal(byChat['chat-b'], undefined);
+      env.document.title = 'Chat B - Claude';
+      env.advance(S);
+      await env.ctl.flush();
+      assert.equal(env.deltas().at(-1).title, 'Chat B');
+    });
+
+    it('uses the old title for the old chat even after the page title changed', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.advance(2 * S);
+      env.document.title = 'Chat B - Claude';
+      env.window.history.pushState({}, '', '/chat/chat-b');
+      env.advance(S);
+      await env.ctl.flush();
+      const a = env.deltas().filter((d) => d.chatId === 'chat-a');
+      assert.ok(a.every((d) => d.title === 'Chat A'), JSON.stringify(a));
+    });
+
+    it('ignores the bare "Claude" placeholder title', async () => {
+      env = setup();
+      env.document.title = 'Claude';
+      await env.ctl.start();
+      env.advance(2 * S);
+      await env.ctl.flush();
+      assert.equal(env.deltas()[0].title, undefined);
+    });
+
+    it('does not send a title for non-chat pages', async () => {
+      env = setup({ url: 'https://claude.ai/new' });
+      await env.ctl.start();
+      env.advance(2 * S);
+      await env.ctl.flush();
+      assert.equal(env.deltas()[0].title, undefined);
+    });
+  });
+
+  describe('responses', () => {
+    it('does not report a completion against a chat you navigated to mid-response', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.stream(true);
+      env.advance(2 * S);
+      env.document.querySelector('[data-is-streaming]').remove();
+      env.window.history.pushState({}, '', '/chat/chat-b');
+      env.document.title = 'Chat B - Claude';
+      env.advance(5 * S);
+      assert.equal(env.fake.sent.filter((m) => m.type === 'response-complete').length, 0);
+      assert.equal(env.document.title, 'Chat B - Claude');
+    });
+
+    it('picks up streaming changes immediately, without waiting for the next tick', async () => {
+      env = setup({ options: { settleMs: 30 } });
+      await env.ctl.start();
+      env.stream(true);
+      await wait(20);
+      assert.equal(env.document.title, `${STATUS_PREFIX.generating}Chat A - Claude`);
+      env.setFocused(false);
+      env.stream(false);
+      await wait(20);
+      env.setTime(env.now() + 100);
+      await wait(80);
+      assert.ok(env.fake.sent.some((m) => m.type === 'response-complete'), 'completion should not need the interval tick');
+    });
+
+    it('counts reading a fresh reply as active time', async () => {
+      env = setup({ sync: { settings: { idleAfterSec: 10 } } });
+      await env.ctl.start();
+      env.stream(true, 'Thinking');
+      env.advance(20 * S); // 10s active, then watching Claude
+      env.stream(false, Array(240).fill('word').join(' ')); // ~60s of reading at 240 wpm
+      env.advance(60 * S);
+      const totals = env.ctl.tracker().totals();
+      assert.ok(totals.idleMs <= 2 * S, `reading counted as idle: ${totals.idleMs}`);
+      env.advance(20 * S);
+      assert.ok(env.ctl.tracker().totals().idleMs >= 10 * S, 'idle again once the reading time is used up');
+    });
+
+    it('starts the reading allowance only when you come back to the tab', async () => {
+      env = setup({ sync: { settings: { idleAfterSec: 10 } } });
+      await env.ctl.start();
+      env.stream(true);
+      env.advance(2 * S);
+      env.setVisible(false);
+      env.stream(false, Array(120).fill('word').join(' ')); // ~30s of reading
+      env.advance(5 * 60 * S);
+      env.setVisible(true);
+      env.advance(25 * S);
+      assert.equal(env.ctl.tracker().totals().idleMs, 0);
+    });
+  });
+
+  describe('activity detection', () => {
+    it('counts focus inside an embedded artifact iframe as activity', async () => {
+      env = setup({ sync: { settings: { idleAfterSec: 10 } } });
+      await env.ctl.start();
+      const frame = env.document.createElement('iframe');
+      env.document.body.append(frame);
+      Object.defineProperty(env.document, 'activeElement', { get: () => frame, configurable: true });
+      env.advance(60 * S);
+      assert.equal(env.ctl.tracker().totals().idleMs, 0);
+    });
+  });
+
+  describe('robustness', () => {
+    it('shuts itself down when the extension is reloaded or updated', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.fake.chrome.runtime.id = undefined;
+      env.advance(S);
+      assert.equal(env.document.getElementById(HOST_ID), null);
+      assert.equal(env.document.getElementById(TINT_ID), null);
+    });
+
+    it('restores a saved widget position', async () => {
+      env = setup({ local: { widgetPosition: { top: 200, right: 40 } } });
+      await env.ctl.start();
+      await flush();
+      const box = env.shadow().querySelector('.ccf-widget');
+      assert.equal(box.style.top, '200px');
+      assert.equal(box.style.right, '40px');
+    });
+
+    it('passes the page dark mode to the widget', async () => {
+      env = setup();
+      env.document.documentElement.setAttribute('data-mode', 'dark');
+      await env.ctl.start();
+      assert.equal(env.shadow().querySelector('.ccf-widget').dataset.theme, 'dark');
+    });
+
+    it('flushes on a 5 second timer, not on tick count', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.advance(S);
+      for (let i = 0; i < 20; i++) env.ctl.tick(); // extra ticks (e.g. from DOM mutations) at the same instant
+      await flush();
+      assert.equal(env.deltas().length, 0);
+      env.advance(4 * S);
+      await flush();
+      assert.equal(env.deltas().length, 1);
+    });
+  });
+
+  describe('favicon', () => {
+    const icon = (doc) => doc.querySelector('link[rel~="icon"]');
+
+    it('colours the tab icon with the chat colour and restores it later', async () => {
+      env = setup();
+      const link = env.document.createElement('link');
+      link.rel = 'icon';
+      link.href = 'https://claude.ai/favicon.ico';
+      env.document.head.append(link);
+      await env.ctl.start();
+      assert.match(icon(env.document).href, /^data:image\/svg\+xml/);
+      assert.ok(decodeURIComponent(icon(env.document).href).includes(chatPalette('chat-a', { intensity: 1 }).accent.split(' ')[0]));
+      env.ctl.destroy();
+      assert.equal(icon(env.document).href, 'https://claude.ai/favicon.ico');
+      env = null;
+    });
+
+    it('re-applies the icon if the page swaps it back', async () => {
+      env = setup();
+      await env.ctl.start();
+      icon(env.document).href = 'https://claude.ai/other.ico';
+      env.advance(S);
+      assert.match(icon(env.document).href, /^data:image\/svg\+xml/);
+    });
+
+    it('can be switched off', async () => {
+      env = setup({ sync: { settings: { colorFavicon: false } } });
+      await env.ctl.start();
+      assert.equal(icon(env.document), null);
     });
   });
 });

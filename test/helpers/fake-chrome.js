@@ -47,7 +47,7 @@ function createFakeChrome({ sync = {}, local = {}, tabs = [] } = {}) {
   const tabUpdates = [];
   const windowUpdates = [];
   const alarms = [];
-  let openedOptions = 0;
+  const injected = [];
 
   const chrome = {
     storage: { sync: area('sync', sync), local: area('local', local), onChanged },
@@ -55,11 +55,7 @@ function createFakeChrome({ sync = {}, local = {}, tabs = [] } = {}) {
       id: 'fake-extension-id',
       onMessage,
       onInstalled: listenerSet(),
-      onStartup: listenerSet(),
       getURL: (p) => `chrome-extension://fake-extension-id/${p.replace(/^\//, '')}`,
-      openOptionsPage: async () => {
-        openedOptions++;
-      },
       sendMessage(message, sender = { tab: { id: 7, windowId: 3, active: true } }) {
         sent.push(message);
         return new Promise((resolve) => {
@@ -105,6 +101,12 @@ function createFakeChrome({ sync = {}, local = {}, tabs = [] } = {}) {
     alarms: {
       onAlarm: listenerSet(),
       create: (name, info) => alarms.push({ name, ...info }),
+      get: async (name) => alarms.find((a) => a.name === name),
+    },
+    scripting: {
+      executeScript: async ({ target, files }) => {
+        injected.push({ tabId: target.tabId, files });
+      },
     },
   };
 
@@ -117,7 +119,7 @@ function createFakeChrome({ sync = {}, local = {}, tabs = [] } = {}) {
     tabUpdates,
     windowUpdates,
     alarms,
-    openedOptionsCount: () => openedOptions,
+    injected,
   };
 }
 

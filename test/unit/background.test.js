@@ -135,3 +135,53 @@ describe('background', () => {
     assert.deepEqual(keys, ['stats:2026-10-09']);
   });
 });
+
+describe('background review fixes', () => {
+  it('does not reschedule the maintenance alarm every time the worker wakes', async () => {
+    const fake = createFakeChrome();
+    createBackground({ chrome: fake.chrome, now: () => NOW }).init();
+    await flush();
+    createBackground({ chrome: fake.chrome, now: () => NOW }).init();
+    await flush();
+    assert.equal(fake.alarms.filter((a) => a.name === 'ccf-maintenance').length, 1);
+  });
+
+  it('rejects chat ids that could clobber object prototypes', async () => {
+    const { fake } = setup();
+    const res = await fake.chrome.runtime.sendMessage(
+      { type: 'stats-delta', day: '2026-10-09', chatId: '__proto__', delta: { idleMs: 1 } },
+      sender()
+    );
+    assert.equal(res.ok, false);
+  });
+
+  it('alerts once per day when you go over the staring budget', async () => {
+    const { fake } = setup({ sync: { settings: { dailyStaringBudgetMin: 5 } } });
+    const send = (ms) =>
+      fake.chrome.runtime.sendMessage({ type: 'stats-delta', day: '2026-10-09', chatId: 'c', delta: { idleMs: ms } }, sender());
+    await send(4 * MIN);
+    assert.equal(fake.notifications.length, 0);
+    await send(2 * MIN);
+    await send(2 * MIN);
+    const alerts = fake.notifications.filter((n) => n.id.startsWith('ccf-budget'));
+    assert.equal(alerts.length, 1);
+    assert.match(alerts[0].message, /5m 0s/);
+  });
+
+  it('does not alert about the budget when that is switched off', async () => {
+    const { fake } = setup({ sync: { settings: { dailyStaringBudgetMin: 1, budgetAlert: false } } });
+    await fake.chrome.runtime.sendMessage({ type: 'stats-delta', day: '2026-10-09', chatId: 'c', delta: { idleMs: 5 * MIN } }, sender());
+    assert.equal(fake.notifications.length, 0);
+  });
+
+  it('re-injects the content scripts into open claude.ai tabs after install or update', async () => {
+    const fake = createFakeChrome({ tabs: [{ id: 1, url: 'https://claude.ai/chat/x' }, { id: 2, url: 'https://claude.ai/new' }] });
+    createBackground({ chrome: fake.chrome, now: () => NOW, contentScripts: ['a.js', 'b.js'] }).init();
+    for (const fn of fake.chrome.runtime.onInstalled.fns) fn({ reason: 'update' });
+    await flush();
+    assert.deepEqual(fake.injected, [
+      { tabId: 1, files: ['a.js', 'b.js'] },
+      { tabId: 2, files: ['a.js', 'b.js'] },
+    ]);
+  });
+});

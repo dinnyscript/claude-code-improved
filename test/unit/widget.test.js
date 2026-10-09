@@ -109,3 +109,72 @@ describe('createWidget', () => {
     assert.equal(document.getElementById(HOST_ID), null);
   });
 });
+
+describe('createWidget review fixes', () => {
+  it('does not announce every per-second update to screen readers', () => {
+    const { $ } = setup();
+    assert.equal($('.ccf-widget').getAttribute('role'), null);
+    assert.notEqual($('.ccf-widget').getAttribute('aria-live'), 'polite');
+    assert.equal($('.ccf-nudge').getAttribute('role'), 'alert');
+  });
+
+  it("follows the page's dark mode rather than the OS setting", () => {
+    const { widget, $ } = setup();
+    widget.render({ ...view, dark: true });
+    assert.equal($('.ccf-widget').dataset.theme, 'dark');
+    widget.render({ ...view, dark: false });
+    assert.equal($('.ccf-widget').dataset.theme, 'light');
+  });
+
+  it('drops a stale accent when colours are turned off', () => {
+    const { widget, $ } = setup();
+    widget.render(view);
+    assert.equal($('.ccf-widget').style.getPropertyValue('--ccf-accent'), view.accent);
+    widget.render({ ...view, accent: undefined });
+    assert.equal($('.ccf-widget').style.getPropertyValue('--ccf-accent'), '');
+  });
+
+  it('sits in the top-right corner by default, away from the composer', () => {
+    const { $ } = setup();
+    const box = $('.ccf-widget');
+    assert.equal(box.style.top, '64px');
+    assert.equal(box.style.right, '16px');
+    assert.equal(box.style.bottom, '');
+  });
+
+  it('can be dragged by its header and reports the new position', () => {
+    const moves = [];
+    const { document, widget, $ } = setup({ onMove: (p) => moves.push(p) });
+    widget.render(view);
+    const win = document.defaultView;
+    const fire = (target, type, x, y) =>
+      target.dispatchEvent(new win.MouseEvent(type, { clientX: x, clientY: y, bubbles: true, composed: true, button: 0 }));
+    fire($('.ccf-header'), 'pointerdown', 900, 100);
+    fire(win, 'pointermove', 850, 300);
+    fire(win, 'pointerup', 850, 300);
+    assert.equal($('.ccf-widget').style.top, '264px');
+    assert.equal($('.ccf-widget').style.right, '66px');
+    assert.deepEqual(moves, [{ top: 264, right: 66 }]);
+    // further moves after release are ignored
+    fire(win, 'pointermove', 0, 0);
+    assert.equal($('.ccf-widget').style.top, '264px');
+  });
+
+  it('does not start a drag from the collapse button', () => {
+    const moves = [];
+    const { document, $ } = setup({ onMove: (p) => moves.push(p) });
+    const win = document.defaultView;
+    $('.ccf-toggle').dispatchEvent(new win.MouseEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true }));
+    win.dispatchEvent(new win.MouseEvent('pointermove', { clientX: 500, clientY: 500 }));
+    win.dispatchEvent(new win.MouseEvent('pointerup', { clientX: 500, clientY: 500 }));
+    assert.deepEqual(moves, []);
+  });
+
+  it('keeps a restored position on screen', () => {
+    const { document, widget, $ } = setup();
+    const win = document.defaultView;
+    widget.setPosition({ top: 99999, right: -50 });
+    assert.equal($('.ccf-widget').style.top, `${win.innerHeight - 40}px`);
+    assert.equal($('.ccf-widget').style.right, '0px');
+  });
+});

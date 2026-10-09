@@ -44,4 +44,9 @@ describe('normalizeSettings', () => {
   it('accepts numeric strings from form inputs', () => {
     assert.equal(normalizeSettings({ idleAfterSec: '60' }).idleAfterSec, 60);
   });
+
+  it('has defaults for the newer options', () => {
+    assert.equal(DEFAULT_SETTINGS.colorFavicon, true);
+    assert.equal(DEFAULT_SETTINGS.budgetAlert, true);
+  });
 });
