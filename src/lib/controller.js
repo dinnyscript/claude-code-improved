@@ -138,7 +138,9 @@
             snoozedUntil = now() + SNOOZE_MS;
           },
           onToggle: (collapsed) => {
-            chrome.storage.local.set({ widgetCollapsed: collapsed }).catch?.(() => {});
+            Promise.resolve()
+              .then(() => chrome.storage.local.set({ widgetCollapsed: collapsed }))
+              .catch(() => {});
           },
         });
         chrome.storage.local
@@ -184,8 +186,7 @@
       inFlightStaringMs = 0;
     }
 
-    function flush() {
-      const day = L.dayKey(now());
+    function flush(day = L.dayKey(now())) {
       const sends = [];
       for (const [key, tracker] of trackers) {
         const delta = tracker.drain();
@@ -207,8 +208,8 @@
       const sig = signals();
 
       if (L.dayKey(t) !== todayKey) {
-        flush();
-        loadToday();
+        flush(todayKey); // time before this tick belongs to the day that just ended
+        loadToday().then(() => renderWidget(applyColor()));
       }
 
       const key = currentChatId() || OTHER_CHAT;

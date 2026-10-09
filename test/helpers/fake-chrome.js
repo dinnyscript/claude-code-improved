@@ -121,6 +121,9 @@ function createFakeChrome({ sync = {}, local = {}, tabs = [] } = {}) {
   };
 }
 
-const flush = () => new Promise((r) => setTimeout(r, 0));
+// Lets queued promise/timer work (including fake storage latency) run to completion.
+const flush = async (rounds = 5) => {
+  for (let i = 0; i < rounds; i++) await new Promise((r) => setTimeout(r, 0));
+};
 
 module.exports = { createFakeChrome, flush };

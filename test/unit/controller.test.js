@@ -10,7 +10,7 @@ const { STATUS_PREFIX } = require('../../src/lib/title.js');
 
 const S = 1000;
 
-function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {} } = {}) {
+function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {}, start = 1_000_000 } = {}) {
   const dom = new JSDOM('<!doctype html><html><head><title>Chat A - Claude</title></head><body><main></main></body></html>', { url });
   const { window } = dom;
   const { document } = window;
@@ -19,7 +19,7 @@ function setup({ url = 'https://claude.ai/chat/chat-a', sync = {}, local = {} } 
   Object.defineProperty(document, 'visibilityState', { get: () => (visible ? 'visible' : 'hidden'), configurable: true });
   document.hasFocus = () => focused;
   const fake = createFakeChrome({ sync, local });
-  let t = 1_000_000;
+  let t = start;
   const ctl = createController({ window, document, chrome: fake.chrome, now: () => t, autoTick: false });
   const env = {
     window,
@@ -221,6 +221,72 @@ describe('controller', () => {
       env = setup({ sync: { settings: { widgetEnabled: false } } });
       await env.ctl.start();
       assert.equal(env.document.getElementById(HOST_ID), null);
+    });
+  });
+
+  describe('more lifecycle', () => {
+    it('starts a new day at midnight', async () => {
+      const { dayKey } = require('../../src/lib/format.js');
+      const beforeMidnight = new Date(2026, 9, 9, 23, 59, 50).getTime();
+      env = setup({ start: beforeMidnight, local: { 'stats:2026-10-09': { chats: { x: { idleMs: 60 * S } } } } });
+      await env.ctl.start();
+      assert.match(env.shadow().querySelector('.ccf-today').textContent, /1m 0s/);
+      env.advance(20 * S);
+      await env.ctl.flush();
+      await flush();
+      const days = new Set(env.deltas().map((d) => d.day));
+      assert.deepEqual([...days].sort(), ['2026-10-09', '2026-10-10']);
+      assert.equal(dayKey(env.now()), '2026-10-10');
+      assert.match(env.shadow().querySelector('.ccf-today').textContent, /Today staring: 0s/);
+    });
+
+    it("updates today's total when another tab records stats", async () => {
+      const { dayKey } = require('../../src/lib/format.js');
+      env = setup();
+      await env.ctl.start();
+      await env.fake.chrome.storage.local.set({ [`stats:${dayKey(env.now())}`]: { chats: { z: { waitingMs: 120 * S } } } });
+      await flush();
+      env.advance(S);
+      assert.match(env.shadow().querySelector('.ccf-today').textContent, /2m 0s/);
+    });
+
+    it('remembers whether the widget is collapsed', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.shadow().querySelector('.ccf-toggle').click();
+      await flush();
+      assert.deepEqual(await env.fake.chrome.storage.local.get('widgetCollapsed'), { widgetCollapsed: true });
+      env.ctl.destroy();
+      env = setup({ local: { widgetCollapsed: true } });
+      await env.ctl.start();
+      await flush();
+      assert.equal(env.shadow().querySelector('.ccf-widget').classList.contains('collapsed'), true);
+    });
+
+    it('removes the widget when it is switched off in settings', async () => {
+      env = setup();
+      await env.ctl.start();
+      await env.fake.chrome.storage.sync.set({ settings: { widgetEnabled: false } });
+      await flush();
+      assert.equal(env.document.getElementById(HOST_ID), null);
+    });
+
+    it('flushes on pagehide', async () => {
+      env = setup();
+      await env.ctl.start();
+      env.advance(2 * S);
+      env.window.dispatchEvent(new env.window.Event('pagehide'));
+      await flush();
+      assert.equal(env.deltas().length, 1);
+    });
+
+    it('re-colours when claude.ai switches to dark mode', async () => {
+      env = setup();
+      await env.ctl.start();
+      assert.match(env.css(), /multiply/);
+      env.document.documentElement.setAttribute('data-mode', 'dark');
+      env.advance(S);
+      assert.match(env.css(), /screen/);
     });
   });
 
