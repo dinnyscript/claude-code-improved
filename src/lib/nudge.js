@@ -42,12 +42,12 @@
         ? 'you\'ll get a notification when the reply is done.'
         : 'check back in a few minutes.';
       return {
-        title: `You've watched Claude type for ${duration}`,
+        title: `Watching Claude type for ${duration}`,
         body: level > 1 ? `Watching won't make it faster. Switch tasks - ${then}` : `Switch to something else while you wait - ${then}`,
       };
     }
     const body = IDLE_BODIES[Math.min(IDLE_BODIES.length, Math.max(1, level)) - 1];
-    return { title: `You've been staring at this chat for ${duration}`, body };
+    return { title: `Staring at this chat for ${duration}`, body };
   }
 
   return { createNudger, nudgeMessage };

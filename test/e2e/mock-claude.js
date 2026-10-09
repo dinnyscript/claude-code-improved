@@ -14,7 +14,7 @@ module.exports = function mockClaudePage(url) {
   .composer{margin:0 15% 20px;background:${card};border:1px solid rgba(128,128,128,.3);border-radius:16px;padding:14px;min-height:60px;display:flex;align-items:flex-end;gap:8px}
   textarea{flex:1;border:0;background:transparent;color:inherit;font:inherit;resize:none;outline:none} button{background:#c96442;color:#fff;border:0;border-radius:8px;padding:8px 12px}
   </style></head><body><div class="app"><nav><b>Claude</b><br><br><a href="/new">+ New chat</a><a href="/chat/aaaa-1111">Refactor auth module</a><a href="/chat/bbbb-2222">Trip planning</a><a href="/chat/cccc-3333">SQL perf question</a></nav>
-  <main><header>Plan for ${id}</header><div class="thread" id="thread"><div class="user">How do I refactor this function so it's testable?</div>
+  <main><header>Chat ${id}</header><div class="thread" id="thread"><div class="user">How do I refactor this function so it's testable?</div>
   <div data-is-streaming="false"><p>Here's an approach: extract the side effects behind an interface and inject them.</p><pre>function save(db, user) {\n  return db.insert(user);\n}</pre><p>Then test with a fake db.</p></div></div>
   <div class="composer"><textarea id="composer" placeholder="Reply to Claude..."></textarea><button aria-label="Send message">↑</button></div></main></div></body></html>`;
 };
