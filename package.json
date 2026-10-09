@@ -1,0 +1,19 @@
+{
+  "name": "claude-chat-focus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that makes claude.ai chats easier to tell apart and helps you stop idly staring at them.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test 'test/unit/**/*.test.js'",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**' 'test/unit/**/*.test.js'",
+    "test:e2e": "node --test --test-concurrency=1 'test/e2e/**/*.test.js'",
+    "test:all": "npm test && npm run test:e2e",
+    "lint": "eslint src test",
+    "package": "node scripts/package.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "playwright": "^1.56.1"
+  }
+}
