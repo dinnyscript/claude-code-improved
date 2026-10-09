@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Chat Focus",
+  "version": "1.0.0",
+  "description": "Colour-codes every claude.ai chat and tracks how long you idly stare at them, with nudges, notifications and daily stats.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Claude Chat Focus",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "permissions": ["storage", "notifications", "alarms"],
+  "host_permissions": ["https://claude.ai/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "run_at": "document_idle",
+      "js": [
+        "src/lib/format.js",
+        "src/lib/chat-id.js",
+        "src/lib/color.js",
+        "src/lib/time-tracker.js",
+        "src/lib/settings.js",
+        "src/lib/nudge.js",
+        "src/lib/stats.js",
+        "src/lib/generation.js",
+        "src/lib/title.js",
+        "src/lib/theme.js",
+        "src/lib/widget.js",
+        "src/lib/overrides.js",
+        "src/lib/controller.js",
+        "src/content/content.js"
+      ]
+    }
+  ]
+}

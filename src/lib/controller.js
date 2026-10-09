@@ -33,7 +33,7 @@
   const SNOOZE_MS = 10 * 60 * 1000;
   const INTERACTION_EVENTS = ['keydown', 'mousedown', 'pointerdown', 'wheel', 'touchstart'];
 
-  function createController({ window, document, chrome, now = Date.now, autoTick = true, tickMs = 1000, flushEvery = 15 }) {
+  function createController({ window, document, chrome, now = Date.now, autoTick = true, tickMs = 1000, flushEvery = 5 }) {
     let settings = L.normalizeSettings({});
     let overrides = {};
     let widget = null;

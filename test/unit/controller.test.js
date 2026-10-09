@@ -160,21 +160,22 @@ describe('controller', () => {
       assert.equal(sum('activeMs'), 30 * S);
     });
 
-    it('flushes automatically every flushEvery ticks', async () => {
+    it('flushes automatically every 5 seconds so little is lost if the tab closes', async () => {
       env = setup();
       await env.ctl.start();
       env.advance(16 * S);
       await flush();
-      assert.equal(env.deltas().length, 1);
+      assert.equal(env.deltas().length, 3);
     });
 
     it('flushes when the tab is hidden', async () => {
       env = setup();
       await env.ctl.start();
-      env.advance(5 * S);
+      env.advance(3 * S);
       env.setVisible(false);
       await flush();
       assert.equal(env.deltas().length, 1);
+      assert.equal(env.deltas()[0].delta.activeMs, 3 * S);
     });
 
     it('does not send empty deltas', async () => {
@@ -192,7 +193,8 @@ describe('controller', () => {
       env.advance(5 * S);
       await env.ctl.flush();
       await flush();
-      const byChat = Object.fromEntries(env.deltas().map((d) => [d.chatId, d.delta.activeMs]));
+      const byChat = {};
+      for (const d of env.deltas()) byChat[d.chatId] = (byChat[d.chatId] || 0) + d.delta.activeMs;
       assert.equal(byChat['chat-a'], 10 * S);
       assert.equal(byChat['chat-b'], 5 * S);
     });

@@ -92,9 +92,8 @@ describe('extension end-to-end', { timeout: 120000 }, () => {
 
   it('records stats through the service worker when you switch away', async () => {
     const page = await openChat('55555555-eeee');
-    await page.waitForTimeout(2500);
-    await page.close(); // pagehide -> flush
-    await new Promise((r) => setTimeout(r, 1000));
+    await page.waitForTimeout(6500); // periodic flush every 5s
+    await page.close();
     const data = await worker.evaluate(() => chrome.storage.local.get(null));
     const days = Object.keys(data).filter((k) => k.startsWith('stats:'));
     assert.ok(days.length >= 1, JSON.stringify(data));
