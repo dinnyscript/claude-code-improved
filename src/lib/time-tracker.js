@@ -22,7 +22,7 @@
   function classify(now, signals, { idleAfterMs }) {
     if (!signals.visible || !signals.focused) return 'hidden';
     const last = Number.isFinite(signals.lastInteractionAt) ? signals.lastInteractionAt : -Infinity;
-    if (now - last < idleAfterMs) return 'active';
+    if (now - last <= idleAfterMs) return 'active';
     return signals.generating ? 'waiting' : 'idle';
   }
 
@@ -63,6 +63,7 @@
     return {
       update,
       drain,
+      peek: () => ({ ...pending }),
       totals: () => ({ ...total }),
       state: () => current,
       staringStreakMs: () => streak,

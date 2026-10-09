@@ -151,12 +151,13 @@ describe('controller', () => {
       await env.ctl.start();
       env.advance(40 * S);
       await env.ctl.flush();
-      const [delta] = env.deltas();
-      assert.equal(delta.chatId, 'chat-a');
-      assert.equal(delta.delta.idleMs, 10 * S);
-      assert.equal(delta.delta.activeMs, 30 * S);
-      assert.equal(delta.title, 'Chat A');
-      assert.match(delta.day, /^\d{4}-\d\d-\d\d$/);
+      const deltas = env.deltas();
+      assert.ok(deltas.length >= 2, 'expected periodic and explicit flushes');
+      const sum = (f) => deltas.reduce((acc, d) => acc + d.delta[f], 0);
+      assert.ok(deltas.every((d) => d.chatId === 'chat-a' && d.title === 'Chat A'));
+      assert.ok(deltas.every((d) => /^\d{4}-\d\d-\d\d$/.test(d.day)));
+      assert.equal(sum('idleMs'), 10 * S);
+      assert.equal(sum('activeMs'), 30 * S);
     });
 
     it('flushes automatically every flushEvery ticks', async () => {

@@ -38,5 +38,12 @@
     return out;
   }
 
-  return { DEFAULT_SETTINGS, SETTINGS_SCHEMA: SCHEMA, normalizeSettings };
+  const SETTINGS_KEY = 'settings';
+
+  async function readSettings(syncStorage) {
+    const raw = (await syncStorage.get(SETTINGS_KEY))[SETTINGS_KEY];
+    return normalizeSettings(raw);
+  }
+
+  return { DEFAULT_SETTINGS, SETTINGS_SCHEMA: SCHEMA, SETTINGS_KEY, normalizeSettings, readSettings };
 });

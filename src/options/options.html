@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Chat Focus – Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Claude Chat Focus</h1>
+    <form id="settings-form">
+      <fieldset>
+        <legend>Chat colours</legend>
+        <label><input type="checkbox" name="colorsEnabled"> Give each chat its own background colour</label>
+        <label>Colour intensity
+          <input type="range" name="colorIntensity" min="0" max="1" step="0.05">
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Time tracking</legend>
+        <label><input type="checkbox" name="widgetEnabled"> Show the time widget on claude.ai</label>
+        <label>Count me as idle after
+          <input type="number" name="idleAfterSec" min="5" max="600" step="1"> seconds without typing, clicking or scrolling
+        </label>
+        <label>Daily staring budget
+          <input type="number" name="dailyStaringBudgetMin" min="0" max="1440" step="1"> minutes (0 = no budget)
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Nudges &amp; notifications</legend>
+        <label><input type="checkbox" name="nudgeEnabled"> Nudge me when I stare at a chat</label>
+        <label>Nudge after
+          <input type="number" name="nudgeAfterSec" min="15" max="3600" step="5"> seconds of staring
+        </label>
+        <label><input type="checkbox" name="notifyOnComplete"> Desktop notification when Claude finishes and I'm in another tab</label>
+        <label><input type="checkbox" name="titleStatus"> Show ⏳ / ✅ in the tab title while Claude writes</label>
+      </fieldset>
+
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </form>
+
+    <section class="data">
+      <h2>Your data</h2>
+      <p>All statistics stay in your browser. Stats older than 90 days are deleted automatically.</p>
+      <button type="button" id="export-csv">Export stats as CSV</button>
+      <button type="button" id="reset-stats" class="danger">Delete all stats</button>
+    </section>
+  </main>
+  <script src="../lib/format.js"></script>
+  <script src="../lib/settings.js"></script>
+  <script src="../lib/options-view.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
